@@ -9,7 +9,27 @@ class FreePVCWorkbench(FreeCADGui.Workbench):
 
     MenuText = "FreePVC"
     ToolTip = "Open-source solar plant design toolkit"
-    Icon = os.path.join(os.path.dirname(__file__), "Resources", "icons", "FreePVC.svg")
+
+    def __init__(self):
+        # Get the addon path - FreeCAD sets this when loading addons
+        import sys
+        addon_path = None
+        for path in sys.path:
+            if "FreePVC" in path:
+                addon_path = path
+                break
+
+        if addon_path:
+            self.Icon = os.path.join(addon_path, "Resources", "icons", "FreePVC.svg")
+        else:
+            # Fallback: try to find it in FreeCAD's Mod directory
+            import FreeCAD
+            mod_path = os.path.join(FreeCAD.getUserAppDataDir(), "Mod", "FreePVC")
+            if not os.path.exists(mod_path):
+                mod_path = os.path.join(FreeCAD.getHomePath(), "Mod", "FreePVC")
+            self.Icon = os.path.join(mod_path, "Resources", "icons", "FreePVC.svg")
+
+        super().__init__()
 
     def Initialize(self):
         """Initialize the workbench - called when FreeCAD starts."""
