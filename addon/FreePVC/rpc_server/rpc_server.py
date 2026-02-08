@@ -16,6 +16,7 @@ _server = None
 _server_thread = None
 _running = False
 _command_queue = Queue()
+_timer = None  # Keep reference to timer to prevent garbage collection
 
 
 def execute_in_gui_thread(func):
@@ -246,7 +247,7 @@ def _server_thread_func(host, port):
 
 def start_server(host="localhost", port=9876):
     """Start the XML-RPC server in a background thread."""
-    global _server_thread, _running
+    global _server_thread, _running, _timer
 
     if _running:
         raise Exception("Server is already running")
@@ -255,28 +256,37 @@ def start_server(host="localhost", port=9876):
     _server_thread.start()
 
     # Start a timer to process queued commands in GUI thread
-    from PySide import QtCore
+    try:
+        from PySide2 import QtCore
+    except ImportError:
+        from PySide import QtCore
 
     def process_queue():
-        if not _command_queue.empty():
+        while not _command_queue.empty():
             cmd = _command_queue.get()
             cmd()
 
-    timer = QtCore.QTimer()
-    timer.timeout.connect(process_queue)
-    timer.start(10)  # Check queue every 10ms
+    _timer = QtCore.QTimer()
+    _timer.timeout.connect(process_queue)
+    _timer.start(10)  # Check queue every 10ms
+
+    FreeCAD.Console.PrintMessage("✓ FreePVC RPC queue processor started\n")
 
     return True
 
 
 def stop_server():
     """Stop the XML-RPC server."""
-    global _server, _running
+    global _server, _running, _timer
 
     if not _running:
         raise Exception("Server is not running")
 
     _running = False
+
+    if _timer:
+        _timer.stop()
+        _timer = None
 
     if _server:
         _server.shutdown()
