@@ -4,7 +4,7 @@ import xmlrpc.client
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from freecad_mcp.connection import FreeCADConnection as BaseFreeCADConnection
+    from freecad_mcp.server import FreeCADConnection as BaseFreeCADConnection
 except ImportError:
     # Fallback if freecad-mcp is not installed
     print("Warning: freecad-mcp not found. Using minimal base class.")
