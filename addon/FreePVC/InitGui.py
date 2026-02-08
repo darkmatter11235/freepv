@@ -33,23 +33,42 @@ class FreePVCWorkbench(FreeCADGui.Workbench):
 
     def Initialize(self):
         """Initialize the workbench - called when FreeCAD starts."""
+        import FreeCAD
+        FreeCAD.Console.PrintMessage("FreePVC: Initializing workbench...\n")
+
         # Import command modules
-        from .commands import cmd_rpc
+        try:
+            from .commands import cmd_rpc
+            FreeCAD.Console.PrintMessage("FreePVC: Commands imported successfully\n")
+        except Exception as e:
+            FreeCAD.Console.PrintError(f"FreePVC: Failed to import commands: {e}\n")
+            import traceback
+            traceback.print_exc()
+            return
 
         # Register commands
         self.rpc_commands = ["FreePVC_StartRPC", "FreePVC_StopRPC"]
 
         # Create toolbars
-        self.appendToolbar("MCP Server", self.rpc_commands)
+        try:
+            self.appendToolbar("MCP Server", self.rpc_commands)
+            FreeCAD.Console.PrintMessage(f"FreePVC: Toolbar created with commands: {self.rpc_commands}\n")
+        except Exception as e:
+            FreeCAD.Console.PrintError(f"FreePVC: Failed to create toolbar: {e}\n")
 
         # Create menus
-        self.appendMenu("&FreePVC", self.rpc_commands)
+        try:
+            self.appendMenu("&FreePVC", self.rpc_commands)
+            FreeCAD.Console.PrintMessage("FreePVC: Menu created\n")
+        except Exception as e:
+            FreeCAD.Console.PrintError(f"FreePVC: Failed to create menu: {e}\n")
 
-        print("FreePVC workbench initialized")
+        FreeCAD.Console.PrintMessage("FreePVC: Workbench initialized successfully\n")
 
     def Activated(self):
         """Called when workbench is activated."""
-        print("FreePVC workbench activated")
+        import FreeCAD
+        FreeCAD.Console.PrintMessage("FreePVC: Workbench activated\n")
 
     def Deactivated(self):
         """Called when workbench is deactivated."""
