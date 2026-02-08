@@ -2,6 +2,8 @@
 
 import FreeCAD
 import FreeCADGui
+import sys
+import os
 
 
 class StartRPCCommand:
@@ -20,7 +22,19 @@ class StartRPCCommand:
 
     def Activated(self):
         """Start the RPC server."""
-        from ..rpc_server import rpc_server
+        # Find and import rpc_server module
+        addon_dir = None
+        for path in sys.path:
+            if "FreePVC" in path and os.path.isdir(path):
+                addon_dir = path
+                break
+
+        if addon_dir:
+            rpc_dir = os.path.join(addon_dir, "rpc_server")
+            if rpc_dir not in sys.path:
+                sys.path.insert(0, rpc_dir)
+
+        import rpc_server
 
         try:
             rpc_server.start_server()
@@ -41,13 +55,39 @@ class StopRPCCommand:
 
     def IsActive(self):
         """Active only if server is running."""
-        from ..rpc_server import rpc_server
+        # Find and import rpc_server module
+        addon_dir = None
+        for path in sys.path:
+            if "FreePVC" in path and os.path.isdir(path):
+                addon_dir = path
+                break
 
-        return rpc_server.is_running()
+        if addon_dir:
+            rpc_dir = os.path.join(addon_dir, "rpc_server")
+            if rpc_dir not in sys.path:
+                sys.path.insert(0, rpc_dir)
+
+        try:
+            import rpc_server
+            return rpc_server.is_running()
+        except:
+            return False
 
     def Activated(self):
         """Stop the RPC server."""
-        from ..rpc_server import rpc_server
+        # Find and import rpc_server module
+        addon_dir = None
+        for path in sys.path:
+            if "FreePVC" in path and os.path.isdir(path):
+                addon_dir = path
+                break
+
+        if addon_dir:
+            rpc_dir = os.path.join(addon_dir, "rpc_server")
+            if rpc_dir not in sys.path:
+                sys.path.insert(0, rpc_dir)
+
+        import rpc_server
 
         try:
             rpc_server.stop_server()

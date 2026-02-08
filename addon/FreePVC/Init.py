@@ -1,3 +1,5 @@
 """FreePVC FreeCAD Workbench - Non-GUI initialization."""
 
-print("Loading FreePVC workbench...")
+print("=" * 60)
+print("FreePVC Init.py executing...")
+print("=" * 60)
