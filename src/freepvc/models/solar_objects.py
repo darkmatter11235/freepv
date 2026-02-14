@@ -159,6 +159,7 @@ class LayoutConfig:
     # Layout parameters
     spacing_m: float = 6.0  # Row-to-row spacing
     gcr_target: float = 0.4  # Ground coverage ratio target
+    target_capacity_mw: Optional[float] = None  # Target DC capacity in MW
     
     # Constraints
     max_slope_deg: float = 20.0  # Maximum buildable slope

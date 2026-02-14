@@ -53,12 +53,32 @@ class LayoutEngine:
         # Determine layout area
         if terrain_mesh:
             # Use terrain bounds
-            x_min, x_max = terrain_mesh.bounds_x
-            y_min, y_max = terrain_mesh.bounds_y
-        else:
-            # Default 100m x 100m area
+            bounds = terrain_mesh.bounds
+            x_min, x_max = bounds[0]
+            y_min, y_max = bounds[1]
+        elif config.target_capacity_mw:
+            # Calculate compact area based on target capacity
+            # Estimate number of racks needed
+            panels_per_rack = config.rack_config.panels_per_row * config.rack_config.rows
+            power_per_rack_kw = (panels_per_rack * config.rack_config.panel_spec.power_watts) / 1000.0
+            num_racks_needed = int(config.target_capacity_mw * 1000 / power_per_rack_kw)
+            
+            # Estimate grid size (roughly square layout)
+            racks_per_row = int(num_racks_needed ** 0.5) + 2  # Add buffer
+            
+            # Calculate area needed
+            rack_width_m = config.rack_config.rack_width_mm / 1000.0
+            rack_length_m = config.rack_config.rack_length_mm / 1000.0
+            
+            area_width_m = racks_per_row * rack_width_m * 1.2
+            area_length_m = racks_per_row * row_spacing_m * 1.2
+            
             x_min, y_min = 0, 0
-            x_max, y_max = 100000, 100000  # mm
+            x_max, y_max = area_width_m * 1000, area_length_m * 1000  # Convert to mm
+        else:
+            # Default to moderate area (1km x 1km)
+            x_min, y_min = 0, 0
+            x_max, y_max = 1_000_000, 1_000_000  # mm (1km x 1km)
         
         # Convert to meters for calculations
         x_min_m, x_max_m = x_min / 1000.0, x_max / 1000.0
@@ -68,10 +88,20 @@ class LayoutEngine:
         rack_id = 0
         y_pos = y_min_m
         
+        # Calculate per-rack capacity for target capacity checking
+        panels_per_rack = config.rack_config.panels_per_row * config.rack_config.rows
+        power_per_rack_kw = (panels_per_rack * config.rack_config.panel_spec.power_watts) / 1000.0
+        target_capacity_kw = config.target_capacity_mw * 1000 if config.target_capacity_mw else None
+        current_capacity_kw = 0.0
+        
         while y_pos + rack_length_m < y_max_m:
             x_pos = x_min_m
             
             while x_pos + rack_width_m < x_max_m:
+                # Check if we've reached target capacity
+                if target_capacity_kw and current_capacity_kw >= target_capacity_kw:
+                    break
+                    
                 # Check terrain constraints if available
                 if terrain_mesh:
                     # Sample terrain slope at rack center
@@ -103,9 +133,9 @@ class LayoutEngine:
                     x=x_pos * 1000,  # Convert back to mm
                     y=y_pos * 1000,
                     z=z_m * 1000,
-                    rotation_x=config.rack_config.tilt_angle_deg,
+                    rotation_x=0.0,  # Tilt is built into rack geometry
                     rotation_y=0.0,  # Could adjust based on terrain
-                    rotation_z=config.azimuth_deg,
+                    rotation_z=0.0,  # Azimuth is built into rack geometry
                     terrain_slope_deg=slope,
                     terrain_aspect_deg=aspect,
                     rack_id=f"Rack_{rack_id:04d}",
@@ -113,9 +143,14 @@ class LayoutEngine:
                 
                 placements.append(placement)
                 rack_id += 1
+                current_capacity_kw += power_per_rack_kw
                 
                 x_pos += rack_width_m
             
+            # Check if we've reached target capacity (break outer loop too)
+            if target_capacity_kw and current_capacity_kw >= target_capacity_kw:
+                break
+                
             y_pos += row_spacing_m
         
         # Create layout result
@@ -218,17 +253,18 @@ class LayoutEngine:
             Tuple of (slope_deg, aspect_deg, elevation_mm)
         """
         from freepvc.engines.terrain_engine import TerrainEngine
+        import numpy as np
         
         # Get elevation
-        z_mm = TerrainEngine.interpolate_elevation(terrain_mesh, x_mm, y_mm)
+        z_mm = TerrainEngine.interpolate_elevation(terrain_mesh, np.array([x_mm, y_mm]))
         
         # Sample nearby points to calculate slope
-        delta = 100.0  # mm
+        delta = 1000.0  # mm (1 meter for better slope calculation)
         try:
-            z_xp = TerrainEngine.interpolate_elevation(terrain_mesh, x_mm + delta, y_mm)
-            z_xn = TerrainEngine.interpolate_elevation(terrain_mesh, x_mm - delta, y_mm)
-            z_yp = TerrainEngine.interpolate_elevation(terrain_mesh, x_mm, y_mm + delta)
-            z_yn = TerrainEngine.interpolate_elevation(terrain_mesh, x_mm, y_mm - delta)
+            z_xp = TerrainEngine.interpolate_elevation(terrain_mesh, np.array([x_mm + delta, y_mm]))
+            z_xn = TerrainEngine.interpolate_elevation(terrain_mesh, np.array([x_mm - delta, y_mm]))
+            z_yp = TerrainEngine.interpolate_elevation(terrain_mesh, np.array([x_mm, y_mm + delta]))
+            z_yn = TerrainEngine.interpolate_elevation(terrain_mesh, np.array([x_mm, y_mm - delta]))
             
             # Calculate gradients
             dx = (z_xp - z_xn) / (2 * delta)

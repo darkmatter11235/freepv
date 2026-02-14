@@ -265,6 +265,106 @@ FreeCAD object: `{object_name}`
 
 
 @mcp.tool()
+async def import_terrain_from_coordinates(
+    center_latitude: float,
+    center_longitude: float,
+    width_m: float = 1000.0,
+    height_m: float = 1000.0,
+    resolution_m: float = 10.0,
+    object_name: str = "Terrain",
+    ctx: Context = None,
+) -> list[TextContent | ImageContent]:
+    """Import terrain data from geographic coordinates using elevation API.
+
+    Fetches elevation data from Open-Elevation API (free, no key required)
+    and creates a triangulated terrain mesh in FreeCAD.
+
+    Args:
+        center_latitude: Center latitude in decimal degrees (e.g., 35.0872)
+        center_longitude: Center longitude in decimal degrees (e.g., -106.6504)
+        width_m: Area width in meters (east-west)
+        height_m: Area height in meters (north-south)
+        resolution_m: Sampling resolution in meters (default 10m)
+        object_name: Name for the terrain object in FreeCAD
+
+    Returns:
+        Summary of imported terrain with statistics
+
+    Example:
+        Import terrain for 1km×1km area in Albuquerque, NM:
+        center_latitude=35.0872, center_longitude=-106.6504, width_m=1000, height_m=1000
+    """
+    connection = ctx.request_context.lifespan_context["connection"]
+
+    try:
+        from freepvc.io.elevation_fetch import fetch_terrain_from_coordinates
+        from freepvc.models.terrain import TerrainData, TerrainSource
+        
+        # Fetch elevation data from coordinates
+        x, y, z = await fetch_terrain_from_coordinates(
+            center_latitude,
+            center_longitude,
+            width_m,
+            height_m,
+            resolution_m,
+        )
+        
+        # Combine into Nx3 points array
+        import numpy as np
+        points = np.column_stack((x, y, z))
+        
+        # Create TerrainData object
+        terrain_data = TerrainData(
+            points=points,
+            source=TerrainSource.SURVEYED_POINTS,
+        )
+        
+        # Generate mesh
+        mesh = TerrainEngine.create_mesh_from_points(terrain_data)
+        
+        # Get statistics
+        stats = terrain_data.get_statistics()
+        
+        # Create mesh in FreeCAD via RPC
+        vertices_list = mesh.vertices.tolist()
+        triangles_list = mesh.triangles.tolist()
+        
+        result = connection.create_terrain_mesh(vertices_list, triangles_list, object_name)
+        
+        # Format response
+        response = f"""✓ Terrain imported from coordinates
+
+**Location:**
+- Center: {center_latitude:.6f}°, {center_longitude:.6f}°
+- Area: {width_m:.0f}m × {height_m:.0f}m
+- Resolution: {resolution_m:.1f}m
+
+**Data:**
+- Points: {stats['num_points']:,}
+- Mesh: {mesh.num_vertices:,} vertices, {mesh.num_faces:,} faces
+
+**Extent:**
+- X: {stats['x_extent_m']:.1f} m
+- Y: {stats['y_extent_m']:.1f} m
+- Elevation range: {stats['elevation_range_m']:.1f} m
+
+**Elevation:**
+- Mean: {stats['mean_elevation_mm'] / 1000:.2f} m
+- Std dev: {stats['std_elevation_mm'] / 1000:.2f} m
+
+FreeCAD object: `{object_name}`
+
+**Note:** Elevation data from Open-Elevation API (SRTM 30m dataset).
+For higher resolution, export coordinates and use commercial DEM sources.
+"""
+
+        return [TextContent(type="text", text=response)]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"✗ Error importing terrain from coordinates: {str(e)}")]
+
+
+@mcp.tool()
 async def analyze_terrain_slope(
     terrain_name: str = "Terrain",
     color_scheme: str = "slope",
@@ -763,19 +863,77 @@ async def generate_array_layout(
     try:
         from freepvc.models.solar_objects import RackConfig, LayoutConfig, PanelSpec
         from freepvc.engines.layout_engine import LayoutEngine
+        from freepvc.models.terrain import TerrainMesh
         
         # Get terrain if specified
         terrain_mesh = None
         if terrain_name:
-            # Fetch terrain data would go here
-            pass
+            # Fetch terrain mesh data from FreeCAD
+            code = f"""
+import FreeCAD
+import numpy as np
+doc = FreeCAD.ActiveDocument
+terrain = doc.getObject("{terrain_name}")
+if terrain and hasattr(terrain, "Mesh"):
+    mesh = terrain.Mesh
+    vertices = []
+    for point in mesh.Points:
+        vertices.append([point.x, point.y, point.z])
+    
+    triangles = []
+    for facet in mesh.Facets:
+        triangles.append(facet.PointIndices)
+    
+    result = {{
+        "vertices": vertices,
+        "triangles": triangles,
+    }}
+else:
+    result = None
+result
+"""
+            terrain_data = connection.execute_code(code)
+            
+            if terrain_data:
+                import numpy as np
+                vertices = np.array(terrain_data["vertices"], dtype=np.float64)
+                triangles = np.array(terrain_data["triangles"], dtype=np.int32)
+                terrain_mesh = TerrainMesh(vertices=vertices, triangles=triangles)
+            else:
+                return [TextContent(type="text", text=f"✗ Error: Terrain '{terrain_name}' not found or invalid")]
         
-        # Create rack config (simplified - would query from FreeCAD object)
+        # Query the base rack properties from FreeCAD
+        code = f"""
+import FreeCAD
+doc = FreeCAD.ActiveDocument
+base = doc.getObject("{base_rack}")
+if base:
+    panel_template = base.PanelTemplate if hasattr(base, "PanelTemplate") else None
+    if panel_template:
+        power_w = float(panel_template.PowerWatts) if hasattr(panel_template, "PowerWatts") else 550.0
+    else:
+        power_w = 550.0
+    result = {{
+        "panels_per_row": int(base.PanelsPerRow) if hasattr(base, "PanelsPerRow") else 2,
+        "rows": int(base.Rows) if hasattr(base, "Rows") else 1,
+        "tilt_angle": float(base.TiltAngle) if hasattr(base, "TiltAngle") else 25.0,
+        "power_watts": power_w,
+    }}
+else:
+    result = None
+result
+"""
+        base_rack_props = connection.execute_code(code)
+        
+        if not base_rack_props:
+            return [TextContent(type="text", text=f"✗ Error: Base rack '{base_rack}' not found")]
+        
+        # Create rack config from base rack properties
         rack_config = RackConfig(
-            panel_spec=PanelSpec(),
-            panels_per_row=2,
-            rows=1,
-            tilt_angle_deg=25.0,
+            panel_spec=PanelSpec(power_watts=base_rack_props["power_watts"]),
+            panels_per_row=base_rack_props["panels_per_row"],
+            rows=base_rack_props["rows"],
+            tilt_angle_deg=base_rack_props["tilt_angle"],
         )
         
         layout_config = LayoutConfig(
@@ -783,20 +941,21 @@ async def generate_array_layout(
             spacing_m=spacing_m,
             gcr_target=gcr_target,
             max_slope_deg=max_slope_deg,
+            target_capacity_mw=target_capacity_mw,
         )
         
         # Generate layout
         layout = LayoutEngine.generate_grid_layout(layout_config, terrain_mesh)
         
-        # Convert placements to RPC format
+        # Convert placements to RPC format (ensure native Python types for XML-RPC)
         placements_data = [
             {
-                "x": p.x,
-                "y": p.y,
-                "z": p.z,
-                "rotation_x": p.rotation_x,
-                "rotation_y": p.rotation_y,
-                "rotation_z": p.rotation_z,
+                "x": float(p.x),
+                "y": float(p.y),
+                "z": float(p.z),
+                "rotation_x": float(p.rotation_x),
+                "rotation_y": float(p.rotation_y),
+                "rotation_z": float(p.rotation_z),
                 "name": p.rack_id,
             }
             for p in layout.placements
@@ -805,10 +964,14 @@ async def generate_array_layout(
         # Create array in FreeCAD using efficient Links
         result = connection.server.create_array_layout(base_rack, placements_data)
         
-        response = f"""✓ Generated array layout: {result['group_name']}
+        # Handle result - it might be a dict or might need to extract info
+        group_name = result.get('group_name', 'ArrayLayout') if isinstance(result, dict) else 'ArrayLayout'
+        total_instances = result.get('total_instances', len(placements_data)) if isinstance(result, dict) else len(placements_data)
+        
+        response = f"""✓ Generated array layout: {group_name}
 
 **Layout Statistics:**
-- Total racks: {result['total_instances']}
+- Total racks: {total_instances}
 - Total panels: {layout.total_panels}
 - DC capacity: {layout.dc_capacity_kw / 1000:.2f} MW
 
@@ -820,10 +983,10 @@ async def generate_array_layout(
 **Object Reuse (High Performance!):**
 - Base template: {base_rack}
 - Instances use App::Link (shared geometry)
-- Memory usage: ~{result['total_instances'] * 0.001:.1f} MB (vs {result['total_instances'] * 50:.1f} MB without Links)
+- Memory usage: ~{total_instances * 0.001:.1f} MB (vs {total_instances * 50:.1f} MB without Links)
 
 **Performance:**
-Change the base rack properties and watch ALL {result['total_instances']} instances
+Change the base rack properties and watch ALL {total_instances} instances
 update automatically! This is the power of parametric object reuse.
 """
         return [TextContent(type="text", text=response)]

@@ -21,21 +21,24 @@ class SolarPanel:
             "Width",
             "Dimensions",
             "Panel width (mm)"
-        ).Width = 1134.0
+        )
+        obj.Width = 1134.0
         
         obj.addProperty(
             "App::PropertyLength",
             "Height",
             "Dimensions",
             "Panel height (mm)"
-        ).Height = 2278.0
+        )
+        obj.Height = 2278.0
         
         obj.addProperty(
             "App::PropertyLength",
             "Thickness",
             "Dimensions",
             "Panel thickness (mm)"
-        ).Thickness = 35.0
+        )
+        obj.Thickness = 35.0
         
         # Electrical specifications
         obj.addProperty(
@@ -43,42 +46,48 @@ class SolarPanel:
             "PowerWatts",
             "Electrical",
             "Rated power (W)"
-        ).PowerWatts = 550.0
+        )
+        obj.PowerWatts = 550.0
         
         obj.addProperty(
             "App::PropertyFloat",
             "VoltageVoc",
             "Electrical",
             "Open circuit voltage (V)"
-        ).VoltageVoc = 49.5
+        )
+        obj.VoltageVoc = 49.5
         
         obj.addProperty(
             "App::PropertyFloat",
             "CurrentIsc",
             "Electrical",
             "Short circuit current (A)"
-        ).CurrentIsc = 13.9
+        )
+        obj.CurrentIsc = 13.9
         
         obj.addProperty(
             "App::PropertyFloat",
             "VoltageMpp",
             "Electrical",
             "Maximum power point voltage (V)"
-        ).VoltageMpp = 41.7
+        )
+        obj.VoltageMpp = 41.7
         
         obj.addProperty(
             "App::PropertyFloat",
             "CurrentMpp",
             "Electrical",
             "Maximum power point current (A)"
-        ).CurrentMpp = 13.2
+        )
+        obj.CurrentMpp = 13.2
         
         obj.addProperty(
             "App::PropertyFloat",
             "Efficiency",
             "Electrical",
             "Panel efficiency (fraction)"
-        ).Efficiency = 0.21
+        )
+        obj.Efficiency = 0.21
         
         # Metadata
         obj.addProperty(
@@ -86,14 +95,16 @@ class SolarPanel:
             "Manufacturer",
             "Metadata",
             "Panel manufacturer"
-        ).Manufacturer = "Generic"
+        )
+        obj.Manufacturer = "Generic"
         
         obj.addProperty(
             "App::PropertyString",
             "Model",
             "Metadata",
             "Panel model"
-        ).Model = "550W-Mono"
+        )
+        obj.Model = "550W-Mono"
         
         # Visual properties
         obj.addProperty(
@@ -101,27 +112,31 @@ class SolarPanel:
             "PanelColor",
             "Display",
             "Panel surface color"
-        ).PanelColor = (0.1, 0.3, 0.8, 1.0)  # Blue
+        )
+        obj.PanelColor = (0.1, 0.3, 0.8, 1.0)  # Blue
         
         obj.addProperty(
             "App::PropertyColor",
             "FrameColor",
             "Display",
             "Frame color"
-        ).FrameColor = (0.2, 0.2, 0.2, 1.0)  # Dark gray
+        )
+        obj.FrameColor = (0.2, 0.2, 0.2, 1.0)  # Dark gray
         
         obj.addProperty(
             "App::PropertyBool",
             "ShowFrame",
             "Display",
             "Show panel frame"
-        ).ShowFrame = True
+        )
+        obj.ShowFrame = True
         
         obj.Proxy = self
         self.Type = "SolarPanel"
     
     def execute(self, obj):
         """Generate panel geometry when properties change."""
+        import FreeCAD
         import Part
         
         # Main panel body (blue surface)

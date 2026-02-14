@@ -33,21 +33,24 @@ class FixedRack:
             "PanelsPerRow",
             "Array",
             "Number of panels per row (across)"
-        ).PanelsPerRow = 2
+        )
+        obj.PanelsPerRow = 2
         
         obj.addProperty(
             "App::PropertyInteger",
             "Rows",
             "Array",
             "Number of rows (vertically)"
-        ).Rows = 1
+        )
+        obj.Rows = 1
         
         obj.addProperty(
             "App::PropertyLength",
             "PanelGap",
             "Array",
             "Gap between panels (mm)"
-        ).PanelGap = 20.0
+        )
+        obj.PanelGap = 20.0
         
         # Mounting configuration
         obj.addProperty(
@@ -55,28 +58,32 @@ class FixedRack:
             "TiltAngle",
             "Mounting",
             "Panel tilt angle from horizontal"
-        ).TiltAngle = 25.0
+        )
+        obj.TiltAngle = 25.0
         
         obj.addProperty(
             "App::PropertyAngle",
             "Azimuth",
             "Mounting",
             "Array azimuth (0=N, 90=E, 180=S, 270=W)"
-        ).Azimuth = 180.0
+        )
+        obj.Azimuth = 180.0
         
         obj.addProperty(
             "App::PropertyLength",
             "PostHeight",
             "Mounting",
             "Support post height (mm)"
-        ).PostHeight = 2000.0
+        )
+        obj.PostHeight = 2000.0
         
         obj.addProperty(
             "App::PropertyLength",
             "GroundClearance",
             "Mounting",
             "Minimum ground clearance (mm)"
-        ).GroundClearance = 500.0
+        )
+        obj.GroundClearance = 500.0
         
         # Structural elements
         obj.addProperty(
@@ -84,28 +91,32 @@ class FixedRack:
             "PostDiameter",
             "Structure",
             "Support post diameter (mm)"
-        ).PostDiameter = 100.0
+        )
+        obj.PostDiameter = 100.0
         
         obj.addProperty(
             "App::PropertyInteger",
             "NumPosts",
             "Structure",
             "Number of support posts"
-        ).NumPosts = 4
+        )
+        obj.NumPosts = 4
         
         obj.addProperty(
             "App::PropertyLength",
             "BeamWidth",
             "Structure",
             "Structural beam width (mm)"
-        ).BeamWidth = 80.0
+        )
+        obj.BeamWidth = 80.0
         
         obj.addProperty(
             "App::PropertyLength",
             "BeamHeight",
             "Structure",
             "Structural beam height (mm)"
-        ).BeamHeight = 40.0
+        )
+        obj.BeamHeight = 40.0
         
         # Display options
         obj.addProperty(
@@ -113,30 +124,33 @@ class FixedRack:
             "ShowPanels",
             "Display",
             "Show solar panels"
-        ).ShowPanels = True
+        )
+        obj.ShowPanels = True
         
         obj.addProperty(
             "App::PropertyBool",
             "ShowStructure",
             "Display",
             "Show support structure"
-        ).ShowStructure = True
+        )
+        obj.ShowStructure = True
         
         obj.addProperty(
             "App::PropertyBool",
             "ShowPosts",
             "Display",
             "Show support posts"
-        ).ShowPosts = True
+        )
+        obj.ShowPosts = True
         
-        # Calculated properties (read-only via expression)
+        # Calculated properties
         obj.addProperty(
             "App::PropertyInteger",
             "TotalPanels",
             "Calculated",
             "Total number of panels"
         )
-        obj.setEditorMode("TotalPanels", 1)  # Read-only
+        obj.TotalPanels = 0
         
         obj.addProperty(
             "App::PropertyFloat",
@@ -144,7 +158,7 @@ class FixedRack:
             "Calculated",
             "DC capacity (kW)"
         )
-        obj.setEditorMode("DCCapacity", 1)  # Read-only
+        obj.DCCapacity = 0.0
         
         obj.Proxy = self
         self.Type = "FixedRack"
@@ -175,7 +189,7 @@ class FixedRack:
         # Generate panel array (as a compound for efficiency)
         if obj.ShowPanels:
             panel_shapes = self._generate_panel_array(
-            obj, panel_w, panel_h, panel_t
+                obj, panel_w, panel_h, panel_t
             )
             shapes.extend(panel_shapes)
         

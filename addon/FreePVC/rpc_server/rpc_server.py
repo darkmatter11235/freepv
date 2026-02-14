@@ -7,9 +7,23 @@ import threading
 import traceback
 from xmlrpc.server import SimpleXMLRPCServer
 from queue import Queue
+import sys
+import os
 
 import FreeCAD
 import FreeCADGui
+
+# Setup addon path for imports
+def _setup_addon_path():
+    """Get FreePVC addon root directory."""
+    # This file is in FreePVC/rpc_server/rpc_server.py
+    # Go up two directories to get FreePVC root
+    current_file = os.path.abspath(__file__)
+    rpc_server_dir = os.path.dirname(current_file)
+    freepvc_root = os.path.dirname(rpc_server_dir)
+    return freepvc_root
+
+_ADDON_PATH = _setup_addon_path()
 
 # Global server instance and state
 _server = None
@@ -192,7 +206,16 @@ class FreePVCRPCServer:
         Returns:
             str: Created object name
         """
-        from ..objects.FixedRack import makeFixedRack
+        # Import using importlib to load from file path
+        import sys
+        import os
+        import importlib.util
+        
+        module_path = os.path.join(_ADDON_PATH, 'objects', 'FixedRack.py')
+        spec = importlib.util.spec_from_file_location("FixedRack", module_path)
+        fixed_rack_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixed_rack_module)
+        makeFixedRack = fixed_rack_module.makeFixedRack
         
         doc = FreeCAD.ActiveDocument
         if not doc:
@@ -223,6 +246,8 @@ class FreePVCRPCServer:
             if hasattr(rack, "RowSpacing"):
                 rack.RowSpacing = config["row_spacing"]
         
+        # Mark object as needing recomputation after property changes
+        rack.touch()
         doc.recompute()
         return rack.Name
 
@@ -241,7 +266,16 @@ class FreePVCRPCServer:
         Returns:
             str: Created template name
         """
-        from ..objects.SolarPanel import makeSolarPanel
+        # Import using importlib to load from file path
+        import sys
+        import os
+        import importlib.util
+        
+        module_path = os.path.join(_ADDON_PATH, 'objects', 'SolarPanel.py')
+        spec = importlib.util.spec_from_file_location("SolarPanel", module_path)
+        solar_panel_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solar_panel_module)
+        makeSolarPanel = solar_panel_module.makeSolarPanel
         
         doc = FreeCAD.ActiveDocument
         if not doc:
@@ -283,7 +317,16 @@ class FreePVCRPCServer:
         Returns:
             str: Created object name
         """
-        from ..objects.Tracker import makeSingleAxisTracker
+        # Import using importlib to load from file path
+        import sys
+        import os
+        import importlib.util
+        
+        module_path = os.path.join(_ADDON_PATH, 'objects', 'Tracker.py')
+        spec = importlib.util.spec_from_file_location("Tracker", module_path)
+        tracker_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tracker_module)
+        makeSingleAxisTracker = tracker_module.makeSingleAxisTracker
         
         doc = FreeCAD.ActiveDocument
         if not doc:
@@ -316,6 +359,7 @@ class FreePVCRPCServer:
         doc.recompute()
         return tracker.Name
     
+    @execute_in_gui_thread
     @execute_in_gui_thread
     def create_array_layout(self, base_object, placements):
         """Create an array of solar objects at specified placements.
@@ -438,7 +482,12 @@ def _server_thread_func(host, port):
 
     _running = True
     while _running:
-        _server.handle_request()
+        try:
+            _server.handle_request()
+        except Exception as e:
+            if _running:
+                FreeCAD.Console.PrintError(f"Server error: {e}\n")
+            break
 
 
 def start_server(host="localhost", port=9876):
@@ -473,21 +522,31 @@ def start_server(host="localhost", port=9876):
 
 def stop_server():
     """Stop the XML-RPC server."""
-    global _server, _running, _timer
+    global _server, _running, _timer, _server_thread
 
     if not _running:
         raise Exception("Server is not running")
 
     _running = False
 
+    # Stop the timer first
     if _timer:
         _timer.stop()
         _timer = None
 
+    # Close the server socket to unblock handle_request()
     if _server:
-        _server.shutdown()
+        try:
+            _server.server_close()
+        except Exception as e:
+            FreeCAD.Console.PrintWarning(f"Error closing server: {e}\n")
         _server = None
 
+    # Don't join the thread - it's a daemon thread and will exit on its own
+    _server_thread = None
+
+    FreeCAD.Console.PrintMessage("✓ FreePVC RPC server stopped\n")
+    
     return True
 
 
