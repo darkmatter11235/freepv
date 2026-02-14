@@ -178,18 +178,214 @@ class FreePVCRPCServer:
 
     @execute_in_gui_thread
     def create_fixed_rack(self, config):
-        """Create a fixed-tilt solar rack object.
+        """Create a fixed-tilt solar rack object using FeaturePython.
 
         Args:
             config: Dictionary with rack configuration
+                - panel_template: Optional name of panel template to reference
+                - panels_per_row: Number of panels per row
+                - rows: Number of rows
+                - tilt_angle: Tilt angle in degrees
+                - post_height: Post height in mm
+                - name: Optional object name
 
         Returns:
             str: Created object name
         """
-        # This will be implemented once we have the FeaturePython objects
-        # For now, return a placeholder
-        FreeCAD.Console.PrintMessage("create_fixed_rack called with config: {}\n".format(config))
-        return "FixedRack_placeholder"
+        from ..objects.FixedRack import makeFixedRack
+        
+        doc = FreeCAD.ActiveDocument
+        if not doc:
+            doc = FreeCAD.newDocument("SolarProject")
+        
+        name = config.get("name", "FixedRack")
+        
+        # Get or create panel template
+        panel_template = None
+        if "panel_template" in config:
+            panel_template = doc.getObject(config["panel_template"])
+        
+        # Create rack object
+        rack = makeFixedRack(name, panel_template)
+        
+        # Set properties from config
+        if "panels_per_row" in config:
+            rack.PanelsPerRow = config["panels_per_row"]
+        if "rows" in config:
+            rack.Rows = config["rows"]
+        if "tilt_angle" in config:
+            rack.TiltAngle = config["tilt_angle"]
+        if "post_height" in config:
+            rack.PostHeight = config["post_height"]
+        if "azimuth" in config:
+            rack.Azimuth = config["azimuth"]
+        if "row_spacing" in config:
+            if hasattr(rack, "RowSpacing"):
+                rack.RowSpacing = config["row_spacing"]
+        
+        doc.recompute()
+        return rack.Name
+
+    @execute_in_gui_thread
+    def create_panel_template(self, config):
+        """Create a solar panel template object for reuse.
+
+        Args:
+            config: Dictionary with panel configuration
+                - width: Panel width in mm
+                - height: Panel height in mm
+                - thickness: Panel thickness in mm
+                - power_watts: Rated power in watts
+                - name: Optional object name
+
+        Returns:
+            str: Created template name
+        """
+        from ..objects.SolarPanel import makeSolarPanel
+        
+        doc = FreeCAD.ActiveDocument
+        if not doc:
+            doc = FreeCAD.newDocument("SolarProject")
+        
+        name = config.get("name", "PanelTemplate")
+        panel = makeSolarPanel(name)
+        
+        # Set properties from config       
+        if "width" in config:
+            panel.Width = config["width"]
+        if "height" in config:
+            panel.Height = config["height"]
+        if "thickness" in config:
+            panel.Thickness = config["thickness"]
+        if "power_watts" in config:
+            panel.PowerWatts = config["power_watts"]
+        if "manufacturer" in config:
+            panel.Manufacturer = config["manufacturer"]
+        if "model" in config:
+            panel.Model = config["model"]
+        
+        doc.recompute()
+        return panel.Name
+    
+    @execute_in_gui_thread
+    def create_tracker(self, config):
+        """Create a single-axis tracker object using FeaturePython.
+
+        Args:
+            config: Dictionary with tracker configuration
+                - panel_template: Optional name of panel template to reference
+                - panels_per_tracker: Number of panels along tracker
+                - rotation_angle: Current rotation angle in degrees
+                - max_rotation: Maximum rotation angle
+                - post_height: Center post height in mm
+                - name: Optional object name
+
+        Returns:
+            str: Created object name
+        """
+        from ..objects.Tracker import makeSingleAxisTracker
+        
+        doc = FreeCAD.ActiveDocument
+        if not doc:
+            doc = FreeCAD.newDocument("SolarProject")
+        
+        name = config.get("name", "Tracker")
+        
+        # Get panel template        
+        panel_template = None
+        if "panel_template" in config:
+            panel_template = doc.getObject(config["panel_template"])
+        
+        # Create tracker object
+        tracker = makeSingleAxisTracker(name, panel_template)
+        
+        # Set properties from config
+        if "panels_per_tracker" in config:
+            tracker.PanelsPerTracker = config["panels_per_tracker"]
+        if "panels_high" in config:
+            tracker.PanelsHigh = config["panels_high"]
+        if "rotation_angle" in config:
+            tracker.RotationAngle = config["rotation_angle"]
+        if "max_rotation" in config:
+            tracker.MaxRotation = config["max_rotation"]
+        if "post_height" in config:
+            tracker.PostHeight = config["post_height"]
+        if "azimuth" in config:
+            tracker.Azimuth = config["azimuth"]
+        
+        doc.recompute()
+        return tracker.Name
+    
+    @execute_in_gui_thread
+    def create_array_layout(self, base_object, placements):
+        """Create an array of solar objects at specified placements.
+        
+        Uses efficient object cloning with Links for memory efficiency.
+         
+        Args:
+            base_object: Name of template object to array
+            placements: List of dictionaries with placement data
+                - x, y, z: Position in mm
+                - rotation_x, rotation_y, rotation_z: Rotations in degrees
+                - name: Optional name for the instance
+        
+        Returns:
+            dict: Result with created object names and statistics
+        """
+        import math
+        
+        doc = FreeCAD.ActiveDocument
+        if not doc:
+            raise Exception("No active document")
+        
+        base = doc.getObject(base_object)
+        if not base:
+            raise Exception(f"Base object '{base_object}' not found")
+        
+        # Create a group for the array
+        array_group = doc.addObject("App::DocumentObjectGroup", "ArrayLayout")
+        created_objects = []
+        
+        for i, placement_data in enumerate(placements):
+            # Use App::Link for efficient object reuse
+            # Links share geometry but have independent placements
+            link_name = placement_data.get("name", f"{base_object}_Instance_{i:04d}")
+            link = doc.addObject("App::Link", link_name)
+            link.LinkedObject = base
+            
+            # Set placement
+            x = placement_data.get("x", 0.0)
+            y = placement_data.get("y", 0.0)
+            z = placement_data.get("z", 0.0)
+            rx = placement_data.get("rotation_x", 0.0)
+            ry = placement_data.get("rotation_y", 0.0)
+            rz = placement_data.get("rotation_z", 0.0)
+            
+            # Create placement
+            placement = FreeCAD.Placement()
+            placement.Base = FreeCAD.Vector(x, y, z)
+            
+            # Apply rotations (Z-Y-X order)
+            if rz != 0:
+                placement.Rotation = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), rz)
+            if ry != 0:
+                placement.Rotation = placement.Rotation * FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), ry)
+            if rx != 0:
+                placement.Rotation = placement.Rotation * FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), rx)
+            
+            link.Placement = placement
+            array_group.addObject(link)
+            created_objects.append(link.Name)
+        
+        doc.recompute()
+        
+        return {
+            "group_name": array_group.Name,
+            "base_object": base_object,
+            "instances_created": len(created_objects),
+            "instance_names": created_objects[:10],  # First 10 names
+            "total_instances": len(created_objects)
+        }
 
     @execute_in_gui_thread
     def get_terrain_elevation(self, terrain_name, x, y):

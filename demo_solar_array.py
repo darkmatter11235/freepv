@@ -203,19 +203,6 @@ print("  - Right mouse: Rotate")
 print("  - View > Standard views > Axonometric")
 print("=" * 60)
 
-# Add project properties
-doc.addProperty("App::PropertyString", "ProjectType", "FreePVC")
-doc.ProjectType = "Solar Array Demo"
-
-doc.addProperty("App::PropertyInteger", "TotalPanels", "FreePVC")
-doc.TotalPanels = len(panels)
-
-doc.addProperty("App::PropertyFloat", "TotalPowerKW", "FreePVC")
-doc.TotalPowerKW = len(panels) * 0.55
-
-doc.addProperty("App::PropertyFloat", "TiltAngle", "FreePVC")
-doc.TiltAngle = tilt_angle
-
 print("\n✓ Demo complete! You can now:")
 print("  1. Rotate the view to see the 3D array")
 print("  2. Click on individual panels to select them")

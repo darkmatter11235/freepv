@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "freepvc": {
+      "command": "/home/dark/freepvc/.venv/bin/python",
+      "args": ["-m", "freepvc.server"],
+      "cwd": "/home/dark/freepvc",
+      "description": "FreePVC - Open-source solar plant design toolkit for FreeCAD",
+      "env": {},
+      "disabled": false
+    }
+  }
+}

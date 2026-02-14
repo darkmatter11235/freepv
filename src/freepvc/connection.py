@@ -12,7 +12,7 @@ except ImportError:
     class BaseFreeCADConnection:
         """Minimal base class if freecad-mcp is not available."""
 
-        RPC_HOST = "localhost"
+        RPC_HOST = "127.0.0.1"
         RPC_PORT = 9875
 
         def __init__(self, host: str = None, port: int = None):
