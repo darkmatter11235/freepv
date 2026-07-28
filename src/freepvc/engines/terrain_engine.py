@@ -16,6 +16,7 @@ from freepvc.models.terrain import (
     ContourLine,
     ContourSet,
 )
+import math
 
 
 class TerrainEngine:
@@ -90,6 +91,64 @@ class TerrainEngine:
             face_slopes=slope_deg,
             face_aspects=aspect_deg,
         )
+    
+    @staticmethod
+    def compute_slopes_at_points(
+        mesh: TerrainMesh,
+        query_points: np.ndarray,
+        delta: float = 1000.0,
+    ) -> np.ndarray:
+        """Compute slope angles at query points by sampling nearby elevations.
+        
+        Args:
+            mesh: Terrain mesh
+            query_points: Nx2 array of [x, y] coordinates
+            delta: Sampling distance in mm (default 1m)
+            
+        Returns:
+            Array of slope angles in degrees
+        """
+        # Ensure 2D array
+        if query_points.ndim == 1:
+            query_points = query_points.reshape(1, -1)
+        
+        n_points = query_points.shape[0]
+        
+        # Generate offset points for gradient calculation
+        # For each point, we need 4 neighbors (±x, ±y)
+        offsets = np.array([
+            [delta, 0],   # +x
+            [-delta, 0],  # -x
+            [0, delta],   # +y
+            [0, -delta],  # -y
+        ])
+        
+        # Create batch of all query points (n_points * 5: center + 4 neighbors)
+        all_queries = np.vstack([
+            query_points,  # Center points
+            *(query_points + offset for offset in offsets)  # Offset points
+        ])
+        
+        # Single batched interpolation call
+        z_values = TerrainEngine.interpolate_elevation(mesh, all_queries)
+        
+        # Reshape: [center_z, xp_z, xn_z, yp_z, yn_z] for each point
+        n_total = n_points
+        z_center = z_values[:n_total]
+        z_xp = z_values[n_total:2*n_total]
+        z_xn = z_values[2*n_total:3*n_total]
+        z_yp = z_values[3*n_total:4*n_total]
+        z_yn = z_values[4*n_total:]
+        
+        # Calculate gradients
+        dx = (z_xp - z_xn) / (2 * delta)
+        dy = (z_yp - z_yn) / (2 * delta)
+        
+        # Calculate slope
+        slope_rad = np.arctan(np.sqrt(dx**2 + dy**2))
+        slope_deg = np.degrees(slope_rad)
+        
+        return slope_deg
 
     @staticmethod
     def interpolate_elevation(
@@ -107,22 +166,30 @@ class TerrainEngine:
         Returns:
             Array of interpolated z-values (elevations)
         """
-        # Extract x, y, z from mesh vertices
-        x = mesh.vertices[:, 0]
-        y = mesh.vertices[:, 1]
-        z = mesh.vertices[:, 2]
-
-        # Create interpolator
-        if method == "linear":
-            interpolator = LinearNDInterpolator(
-                list(zip(x, y)), z, fill_value=np.nan
-            )
-        elif method == "cubic":
-            interpolator = CloughTocher2DInterpolator(
-                list(zip(x, y)), z, fill_value=np.nan
-            )
+        # Use cached interpolator if available
+        cache_key = f"_interpolator_{method}"
+        if hasattr(mesh, cache_key):
+            interpolator = getattr(mesh, cache_key)
         else:
-            raise ValueError(f"Unknown interpolation method: {method}")
+            # Extract x, y, z from mesh vertices
+            x = mesh.vertices[:, 0]
+            y = mesh.vertices[:, 1]
+            z = mesh.vertices[:, 2]
+
+            # Create interpolator and cache it
+            if method == "linear":
+                interpolator = LinearNDInterpolator(
+                    list(zip(x, y)), z, fill_value=np.nan
+                )
+            elif method == "cubic":
+                interpolator = CloughTocher2DInterpolator(
+                    list(zip(x, y)), z, fill_value=np.nan
+                )
+            else:
+                raise ValueError(f"Unknown interpolation method: {method}")
+            
+            # Cache interpolator on mesh object for reuse
+            setattr(mesh, cache_key, interpolator)
 
         # Interpolate
         if query_points.ndim == 1:
@@ -253,40 +320,6 @@ class TerrainEngine:
                     )
 
         return ContourSet(contours=contours, interval=interval, mesh=mesh)
-
-    @staticmethod
-    def compute_slopes_at_points(
-        mesh: TerrainMesh,
-        query_points: np.ndarray,
-    ) -> np.ndarray:
-        """Compute slope angle at specific query points.
-
-        Args:
-            mesh: Terrain mesh
-            query_points: Nx2 array of [x, y] coordinates
-
-        Returns:
-            Array of slope angles in degrees
-        """
-        # For each query point, find the nearest triangle and return its slope
-        slope_map = TerrainEngine.analyze_slope(mesh)
-
-        # Get triangle centroids
-        v0 = mesh.vertices[mesh.triangles[:, 0]]
-        v1 = mesh.vertices[mesh.triangles[:, 1]]
-        v2 = mesh.vertices[mesh.triangles[:, 2]]
-        centroids = (v0 + v1 + v2) / 3
-
-        # For each query point, find nearest centroid
-        slopes = np.zeros(len(query_points))
-
-        for i, point in enumerate(query_points):
-            # Calculate distances to all centroids (2D)
-            dists = np.linalg.norm(centroids[:, :2] - point, axis=1)
-            nearest_idx = np.argmin(dists)
-            slopes[i] = slope_map.face_slopes[nearest_idx]
-
-        return slopes
 
     @staticmethod
     def create_regular_grid_terrain(

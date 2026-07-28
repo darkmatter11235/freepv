@@ -56,30 +56,63 @@ class ElevationFetcher:
         batch_size = 100
         all_results = []
         
-        async with aiohttp.ClientSession() as session:
-            for i in range(0, len(locations), batch_size):
-                batch = locations[i:i + batch_size]
-                payload = {"locations": batch}
-                
+        # Create all batch payloads
+        batches = []
+        for i in range(0, len(locations), batch_size):
+            batch = locations[i:i + batch_size]
+            batches.append({"locations": batch})
+        
+        async def fetch_batch(session, payload, batch_num, max_retries=3):
+            """Fetch a single batch of elevation data with retry logic."""
+            for attempt in range(max_retries):
                 try:
                     async with session.post(url, json=payload, timeout=30) as response:
+                        if response.status == 429:
+                            # Rate limited - wait with exponential backoff
+                            wait_time = (2 ** attempt) * 2  # 2s, 4s, 8s
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(wait_time)
+                                continue
+                            else:
+                                raise RuntimeError(f"Rate limited after {max_retries} retries")
+                        
                         if response.status != 200:
                             raise RuntimeError(f"API request failed: {response.status}")
                         
                         data = await response.json()
                         results = data.get("results", [])
                         
+                        points = []
                         for result in results:
-                            all_results.append(ElevationPoint(
+                            points.append(ElevationPoint(
                                 latitude=result["latitude"],
                                 longitude=result["longitude"],
                                 elevation_m=result["elevation"],
                             ))
+                        return points
                 
                 except asyncio.TimeoutError:
-                    raise RuntimeError(f"Timeout fetching elevation data for batch {i//batch_size + 1}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep((2 ** attempt) * 2)  # 2s, 4s, 8s
+                        continue
+                    raise RuntimeError(f"Timeout fetching elevation data for batch {batch_num + 1}")
+                except RuntimeError:
+                    raise
                 except Exception as e:
-                    raise RuntimeError(f"Error fetching elevation data: {str(e)}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep((2 ** attempt) * 2)  # 2s, 4s, 8s
+                        continue
+                    raise RuntimeError(f"Error fetching batch {batch_num + 1}: {str(e)}")
+        
+        # Process batches sequentially to avoid rate limiting
+        async with aiohttp.ClientSession() as session:
+            for i in range(0, len(batches)):
+                batch_results = await fetch_batch(session, batches[i], i, max_retries=3)
+                all_results.extend(batch_results)
+                
+                # Small delay between requests to avoid rate limiting (except after last batch)
+                if i < len(batches) - 1:
+                    await asyncio.sleep(0.5)  # Reduced from 3.0s to 0.5s
         
         return all_results
     

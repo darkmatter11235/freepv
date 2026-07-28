@@ -378,6 +378,17 @@ class FreePVCRPCServer:
         """
         import math
         
+        # DEBUG: Print first few placements to diagnose issue
+        print(f"\n=== DEBUG create_array_layout ===")
+        print(f"Base object: {base_object}")
+        print(f"Number of placements: {len(placements)}")
+        if len(placements) > 0:
+            print(f"First 3 placements:")
+            for i in range(min(3, len(placements))):
+                p = placements[i]
+                print(f"  [{i}]: x={p.get('x', 'MISSING')}, y={p.get('y', 'MISSING')}, z={p.get('z', 'MISSING')}")
+        print("=================================\n")
+        
         doc = FreeCAD.ActiveDocument
         if not doc:
             raise Exception("No active document")
@@ -385,6 +396,17 @@ class FreePVCRPCServer:
         base = doc.getObject(base_object)
         if not base:
             raise Exception(f"Base object '{base_object}' not found")
+        
+        # Delete old ArrayLayout if it exists (including its children!)
+        old_array = doc.getObject("ArrayLayout")
+        if old_array:
+            # Delete all children first
+            if hasattr(old_array, "Group"):
+                for child in old_array.Group:
+                    doc.removeObject(child.Name)
+            # Then delete the group
+            doc.removeObject("ArrayLayout")
+            doc.recompute()
         
         # Create a group for the array
         array_group = doc.addObject("App::DocumentObjectGroup", "ArrayLayout")
@@ -420,6 +442,9 @@ class FreePVCRPCServer:
             link.Placement = placement
             array_group.addObject(link)
             created_objects.append(link.Name)
+        
+        # Hide the base template object (it's only used as a template)
+        base.ViewObject.Visibility = False
         
         doc.recompute()
         
